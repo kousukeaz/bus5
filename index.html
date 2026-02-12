@@ -29,12 +29,11 @@
     th,td{border-bottom:1px solid #eee;padding:6px 4px;text-align:left;vertical-align:middle;}
     th{color:#333;font-weight:600;}
     .warn{color:var(--ng);font-size:12px;margin-top:6px;}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f2f2f2;font-size:12px;color:#333;border:1px solid #e3e3e3;}
     .stickyWrap{overflow:auto;border:1px solid #eee;border-radius:12px;background:#fff;}
     .matrix{min-width: 920px;}
     .matrix th{position: sticky;top: 0;background: #fff;z-index: 1;}
     .matrix td:first-child, .matrix th:first-child{position: sticky;left: 0;background: #fff;z-index: 2;}
-    .cellNum{width: 92px;padding: 6px;font-size: 16px;border-radius: 8px;}
+    .cellNum{width: 92px;padding: 8px;font-size: 16px;border-radius: 10px;}
     .rowTag{white-space:nowrap;}
     .divider{height:1px;background:#eee;margin:12px 0;}
 
@@ -48,17 +47,30 @@
     .calEmpty{ background:transparent;border:none; }
     .modal{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; padding:16px; }
     .modal[aria-hidden="false"]{ display:flex; }
-    .modalInner{ width:min(520px, 100%); background:#fff; border-radius:14px; padding:12px; border:1px solid #ddd; }
+    .modalInner{ width:min(520px, 100%); background:#fff; border-radius:14px; padding:12px; border:1px solid #ddd; max-height:80vh; overflow:auto; -webkit-overflow-scrolling:touch;}
     .modalHead{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 
-    /* Mobile: 崩れやすい sticky をOFF */
+    /* iPhone: 入力時ズーム防止 */
+    input, select, textarea{ font-size:16px; }
+
+    /* Mobile：レイアウト */
     @media (max-width:520px){
       body{ margin:10px; }
       .grid3,.grid2,.btnrow3,.btnrow2{ grid-template-columns:1fr !important; }
       .matrix th{ position: static !important; }
       .matrix td:first-child, .matrix th:first-child{ position: static !important; }
-      .matrix{ min-width: 760px; }
       .stickyWrap{ -webkit-overflow-scrolling: touch; }
+
+      /* ここから：スマホは“列タブ”で1列入力 */
+      #mobileColTabs, #mobileColHint{ display:block !important; }
+      .matrix th:not(:first-child), .matrix td:not(:first-child){ display:none; }
+      body.show-credit .matrix th.col-credit, body.show-credit .matrix td.col-credit{ display:table-cell; }
+      body.show-cash   .matrix th.col-cash,   body.show-cash   .matrix td.col-cash{ display:table-cell; }
+      body.show-klook  .matrix th.col-klook,  body.show-klook  .matrix td.col-klook{ display:table-cell; }
+      body.show-nutsmeg .matrix th.col-nutsmeg, body.show-nutsmeg .matrix td.col-nutsmeg{ display:table-cell; }
+      body.show-kansai .matrix th.col-kansai, body.show-kansai .matrix td.col-kansai{ display:table-cell; }
+      body.show-ic     .matrix th.col-ic,     body.show-ic     .matrix td.col-ic{ display:table-cell; }
+      .cellNum{ width:100% !important; font-size:18px !important; padding:12px !important; }
     }
   </style>
 </head>
@@ -79,16 +91,16 @@
           <option value="A">バスA</option>
           <option value="B">バスB</option>
         </select>
-        <div class="small" id="busAutoHint"></div>
       </div>
       <div>
-        <label>天気</label>
+        <label>天気（大阪 自動取得）</label>
         <select id="weather">
           <option value="">（未入力）</option>
           <option value="晴れ">晴れ</option>
           <option value="くもり">くもり</option>
           <option value="雨">雨</option>
         </select>
+        <div id="wxStatus" class="small"></div>
       </div>
     </div>
 
@@ -127,17 +139,29 @@
   <div class="card">
     <h2>③ 売上入力（表）</h2>
     <div class="small">列：クレ / 現金 / Klook / ナツメグ / 関西 / IC（未入力=0）</div>
+
+    <!-- スマホ用：入力列切替 -->
+    <div id="mobileColTabs" class="btnrow3" style="display:none; margin-top:10px;">
+      <button type="button" class="sub" data-col="credit">クレ</button>
+      <button type="button" class="sub" data-col="cash">現金</button>
+      <button type="button" class="sub" data-col="klook">Klook</button>
+      <button type="button" class="sub" data-col="nutsmeg">ナツメグ</button>
+      <button type="button" class="sub" data-col="kansai">関西</button>
+      <button type="button" class="sub" data-col="ic">IC</button>
+    </div>
+    <div id="mobileColHint" class="small" style="display:none;">スマホは列をタブで切り替えて入力（見やすさ優先）</div>
+
     <div class="stickyWrap" style="margin-top:10px;">
       <table class="matrix" id="salesMatrix">
         <thead>
           <tr>
             <th>項目</th>
-            <th>クレジット</th>
-            <th>現金</th>
-            <th>Klook</th>
-            <th>ナツメグ</th>
-            <th>関西パス</th>
-            <th>交通系IC</th>
+            <th class="col-credit">クレジット</th>
+            <th class="col-cash">現金</th>
+            <th class="col-klook">Klook</th>
+            <th class="col-nutsmeg">ナツメグ</th>
+            <th class="col-kansai">関西パス</th>
+            <th class="col-ic">交通系IC</th>
           </tr>
         </thead>
         <tbody id="matrixBody"></tbody>
@@ -230,8 +254,8 @@
 (() => {
   const $ = (id) => document.getElementById(id);
 
-  // ★あなたのGAS /exec URL（必ず /exec）
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwbWy_qqSS8MDIejie8pza4BD4_WMIaDdNZ2ChUm_WJsDcfku0zb_rjA-d2HnRpQyRQ/exec";
+  // ★必ず /exec を貼る
+  const GAS_URL = "PASTE_YOUR_GAS_EXEC_URL_HERE";
 
   // ===== JSONP（CORS回避）=====
   function jsonp(url){
@@ -256,20 +280,60 @@
   }
 
   // ===== LocalStorage =====
-  const LS = { A2:"bus_report_A2", B2:"bus_report_B2", lastBus:"bus_report_lastBus", clientId:"bus_report_client_id" };
+  const LS = {
+    A2:"bus_report_A2", B2:"bus_report_B2", lastBus:"bus_report_lastBus",
+    clientId:"bus_report_client_id",
+    weather:"bus_report_weather"
+  };
+
+  // ===== 天気（大阪 自動取得）=====
+  // Open-Meteo (大阪市付近)
+  const OSAKA = { lat: 34.6937, lon: 135.5023 };
+  function mapWeatherCodeToJP(code){
+    // Open-Meteo weathercode
+    // 0:晴れ, 1-3:雲, 45-48:霧(くもり扱い), 51-67:雨系, 71-77:雪(くもり扱い), 80-82:にわか雨, 95-99:雷雨(雨扱い)
+    if(code === 0) return "晴れ";
+    if((code>=1 && code<=3) || (code>=45 && code<=48)) return "くもり";
+    if((code>=51 && code<=67) || (code>=80 && code<=82) || (code>=95 && code<=99)) return "雨";
+    // それ以外は安全にくもり
+    return "くもり";
+  }
+  async function autoWeatherOsaka(){
+    const st = $("wxStatus");
+    st.textContent = "天気取得中…";
+    try{
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${OSAKA.lat}&longitude=${OSAKA.lon}&current_weather=true&timezone=Asia%2FTokyo`;
+      const res = await fetch(url, {cache:"no-store"});
+      if(!res.ok) throw new Error("wx_http");
+      const data = await res.json();
+      const code = data?.current_weather?.weathercode;
+      if(typeof code !== "number") throw new Error("wx_no_code");
+      const jp = mapWeatherCodeToJP(code);
+      $("weather").value = jp;
+      try{ localStorage.setItem(LS.weather, jp); }catch{}
+      st.textContent = `大阪: ${jp}（自動）`;
+    }catch(e){
+      // 失敗時は前回値を復元
+      try{
+        const w = localStorage.getItem(LS.weather);
+        if(w) $("weather").value = w;
+      }catch{}
+      st.textContent = "天気取得失敗（手動/前回値で対応）";
+    }
+  }
 
   // ===== Master =====
   const TICKETS = [
-    { key:"t1",  no:"①", label:"OCP１DAY",              out:"①OCP１DAY→",              channel:"OCP1day（大人）",      threshold:20, request:20 },
-    { key:"t2",  no:"②", label:"OCP２DAY",              out:"②OCP２DAY→",              channel:"OCP2day（大人）",      threshold:20, request:10 },
-    { key:"t3",  no:"③", label:"バスのみ1DAY",          out:"③バスのみ1DAY→",          channel:"バスのみ1DAY（大人）", threshold:50, request:50 },
-    { key:"t4",  no:"④", label:"バスのみ2DAY",          out:"④バスのみ2DAY →",         channel:"バスのみ2DAY（大人）", threshold:20, request:10 },
-    { key:"t5",  no:"⑤", label:"クルーズのみ",          out:"⑤クルーズのみ→",          channel:"クルーズのみ（大人）", threshold:10, request:10 },
-    { key:"t6",  no:"⑥", label:"OCP1day（子供）",       out:"⑥OCP1day（子供）→",       channel:"OCP1day（子供）",      threshold:10, request:10 },
-    { key:"t7",  no:"⑦", label:"OCP2day（子供)",        out:"⑦OCP2day（子供) →",       channel:"OCP2day（子供）",      threshold:10, request:10 },
-    { key:"t8",  no:"⑧", label:"バスのみ 1DAY （子供)", out:"⑧バスのみ 1DAY （子供)→", channel:"バスのみ1DAY（子供）", threshold:20, request:10 },
-    { key:"t9",  no:"⑨", label:"バスのみ2DAY（子供）",  out:"⑨バスのみ2DAY（子供）→",  channel:"バスのみ2DAY（子供）", threshold:10, request:10 },
-    { key:"t10", no:"⑩", label:"クルーズのみ（子供）",  out:"⑩クルーズのみ（子供）→",  channel:"クルーズのみ（子供）", threshold:10, request:10 },
+    { key:"t1",  no:"①", label:"OCP 1 DAY",              channel:"OCP1day（大人）" },
+    { key:"t2",  no:"②", label:"OCP 2 DAY",              channel:"OCP2day（大人）" },
+    { key:"t3",  no:"③", label:"バスのみ1DAY",          channel:"バスのみ1DAY（大人）" },
+    { key:"t4",  no:"④", label:"バスのみ2DAY",          channel:"バスのみ2DAY（大人）" },
+    { key:"t5",  no:"⑤", label:"クルーズのみ",          channel:"クルーズのみ（大人）" },
+    { key:"t6",  no:"⑥", label:"OCP1day（子供）",       channel:"OCP1day（子供）" },
+    { key:"t7",  no:"⑦", label:"OCP2day（子供）",       channel:"OCP2day（子供）" },
+    { key:"t8",  no:"⑧", label:"バスのみ1DAY（子供）",  channel:"バスのみ1DAY（子供）" },
+    { key:"t9",  no:"⑨", label:"バスのみ2DAY（子供）",  channel:"バスのみ2DAY（子供）" },
+    { key:"t10", no:"⑩", label:"クルーズのみ（子供）",  channel:"クルーズのみ（子供）" },
   ];
   const GOODS = [
     { key:"g_water", label:"水", price:200, outLine:(n)=>`水x${n}本` },
@@ -402,6 +466,8 @@
 
       for(const c of COLS){
         const td = document.createElement("td");
+        td.classList.add("col-" + c.key); // ★スマホ列タブ用
+
         const inp = document.createElement("input");
         inp.className = "cellNum";
         inp.type = "number";
@@ -418,6 +484,20 @@
       }
       tb.appendChild(tr);
     }
+  }
+
+  // スマホ：列タブ
+  function setMobileCol(col){
+    document.body.classList.remove("show-credit","show-cash","show-klook","show-nutsmeg","show-kansai","show-ic");
+    document.body.classList.add("show-" + col);
+  }
+  function initMobileTabs(){
+    const tabs = document.getElementById("mobileColTabs");
+    if(!tabs) return;
+    setMobileCol("cash");
+    tabs.querySelectorAll("button[data-col]").forEach(btn=>{
+      btn.addEventListener("click", ()=>setMobileCol(btn.dataset.col));
+    });
   }
 
   function buildStockMessage(d){
@@ -534,12 +614,11 @@
     };
   }
 
-  // ===== Save via cross-origin FORM (CORS回避) =====
+  // 保存：CORS回避（フォーム送信）
   function saveToSheet(){
     const st = $("saveStatus");
     if(st) st.textContent = "送信中…";
 
-    // 出力が空なら生成
     if(!($("out").value||"").trim()) $("genAll").click();
 
     const payload = JSON.stringify(buildPayloadForSave());
@@ -549,11 +628,10 @@
     form.action = GAS_URL;
     form.submit();
 
-    // 成功判定はレスポンス読めないので、送信完了表示→カレンダーで確認
     setTimeout(()=>{ if(st) st.textContent = "送信しました（カレンダー更新で反映確認）"; }, 600);
   }
 
-  // ===== Parse prev text =====
+  // 前日在庫パース
   function parsePrevText(text){
     const res = { ok:true, missing:[], inv:{} };
     const arrow = "(?:→|⇒|➔|->|＞)";
@@ -567,15 +645,14 @@
     return res;
   }
 
-  // ===== getPrev via JSONP =====
+  // 前回在庫：JSONP
   async function fetchPrevInventory(){
     const st = $("fetchStatus");
     st.textContent = "取得中…";
     try{
       const date = $("date").value;
       const bus = $("bus").value;
-      const url = apiUrl({action:"getPrev", date, bus});
-      const data = await jsonp(url);
+      const data = await jsonp(apiUrl({action:"getPrev", date, bus}));
       if(!data.ok){ st.textContent = "失敗: " + (data.error||"unknown"); return; }
       if(!data.found){ st.textContent = "見つかりません（ペーストで対応）"; return; }
       prevInv = data.inv || prevInv;
@@ -586,7 +663,7 @@
     }
   }
 
-  // ===== Calendar via JSONP =====
+  // ===== Calendar =====
   const DOW = ["日","月","火","水","木","金","土"];
   let calYear, calMonth; // 1-12
   function ymd(y,m,d){ return `${y}-${pad2(m)}-${pad2(d)}`; }
@@ -616,7 +693,6 @@
   function buildCalendarGrid(year, month, bus, dayToGross){
     renderDow();
     const grid = $("calGrid");
-
     const first = new Date(year, month-1, 1);
     const last  = new Date(year, month, 0);
     const firstDow = first.getDay();
@@ -666,27 +742,27 @@
     const st = $("calStatus");
     st.textContent = "読み込み中…";
     try{
+      // pingでGAS公開チェック（失敗なら原因が分かりやすい）
+      await jsonp(apiUrl({action:"ping"}));
+
       const bus = $("calBus").value;
       const year = calYear;
       const month = pad2(calMonth);
       $("monthTitle").textContent = `${year}年 ${calMonth}月（バス${bus}）`;
 
-      const url = apiUrl({action:"getMonth", year:String(year), month, bus});
-      const data = await jsonp(url);
-
+      const data = await jsonp(apiUrl({action:"getMonth", year:String(year), month, bus}));
       if(!data.ok){ st.textContent = "失敗: " + (data.error||"unknown"); return; }
       buildCalendarGrid(year, calMonth, bus, data.days || {});
       st.textContent = "OK（日付タップで詳細）";
     }catch(e){
-      st.textContent = "通信エラー（JSONP）";
+      st.textContent = "通信エラー（JSONP） ※GAS公開/URLを確認";
     }
   }
 
   async function loadDayDetail(dateStr, bus){
     openModal(`${dateStr}（バス${bus}）`, "読み込み中…");
     try{
-      const url = apiUrl({action:"getDay", date:dateStr, bus});
-      const data = await jsonp(url);
+      const data = await jsonp(apiUrl({action:"getDay", date:dateStr, bus}));
       if(!data.ok){ openModal(`${dateStr}（バス${bus}）`, "失敗: " + (data.error||"unknown")); return; }
       if(!data.found || !data.report){ openModal(`${dateStr}（バス${bus}）`, "この日付のレポートがありません。"); return; }
 
@@ -750,6 +826,8 @@
 
   $("saveToSheet").addEventListener("click",(e)=>{ e.preventDefault(); saveToSheet(); });
 
+  $("reloadCal").addEventListener("click",(e)=>{ e.preventDefault(); loadCalendar(); }); // ★これが抜けると更新できない
+
   $("taxRate").addEventListener("input", ()=>recompute());
 
   $("bus").addEventListener("change", ()=>{
@@ -760,6 +838,7 @@
     try{
       $("leader2").value = (bus==="A" ? localStorage.getItem(LS.A2) : localStorage.getItem(LS.B2)) || $("leader2").value;
     }catch{}
+    $("calBus").value = bus;
   });
 
   $("leader2").addEventListener("input", ()=>{
@@ -775,9 +854,15 @@
   $("closeModal").addEventListener("click",(e)=>{ e.preventDefault(); closeModal(); });
   $("dayModal").addEventListener("click",(e)=>{ if(e.target && e.target.id==="dayModal") closeModal(); });
 
+  // weather 手動変更 → 保存
+  $("weather").addEventListener("change", ()=>{
+    try{ localStorage.setItem(LS.weather, $("weather").value || ""); }catch{}
+  });
+
   // ===== Init =====
   initCounts();
   buildMatrix();
+  initMobileTabs();
 
   // date init
   $("date").value = new Date().toISOString().slice(0,10);
@@ -788,6 +873,13 @@
   $("bus").value = (lastBus==="A"||lastBus==="B") ? lastBus : "A";
   $("bus").dispatchEvent(new Event("change"));
 
+  // 天気：前回値を一旦復元 → その後に大阪を自動取得で上書き
+  try{
+    const w = localStorage.getItem(LS.weather);
+    if(w) $("weather").value = w;
+  }catch{}
+  autoWeatherOsaka();
+
   recompute();
   renderInvTable();
 
@@ -795,7 +887,6 @@
   const now = new Date();
   calYear = now.getFullYear();
   calMonth = now.getMonth()+1;
-  $("calBus").value = $("bus").value;
   loadCalendar();
 })();
 </script>
